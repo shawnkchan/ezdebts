@@ -89,7 +89,8 @@ async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 		user_last_name = ''
 	
 	# check if user exists in the DB
-	if _userExists(user_handle):
+	userExists = await _userExists(user_handle)
+	if userExists:
 		await context.bot.send_message(chat_id=chat_id, text="You have already registered for an account")
 		return
 
@@ -128,13 +129,22 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	message_text_list = message_text.split()
 	print(message)
 	print(type(message))
-	# eg: '/addexpense
+	
+	# count number of intended mentions
+	tagged_users = 0
+	for word in message_text_list:
+		if word[0] == '@':
+			tagged_users += 1
+	#create dict of currencies and check for it in this loop
 
 	# filter out mentioned users
 	mentions = _filterMentions(message)
 	print(f"mentions: {mentions}")
 	if len(mentions) == 0:
 		await context.bot.send_message(chat_id=chat_id, text="You have 0 valid users mentioned")
+		return
+	if len(mentions) < tagged_users:
+		await context.bot.send_message(chat_id=chat_id, text="Non-existent user tagged")
 		return
 
 	# filter out expenses metadata
@@ -147,6 +157,10 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
 		return
 
+	if type(int(quantity)) != int:
+		await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
+		return
+
 	# check for existence of mentioned users
 	for mention in mentions:
 		userExists = await _userExists(mention)
@@ -155,6 +169,10 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 			return
 		else:
 			print('all users found')
+
+	#need to recognise when tags are not entities
+	
+
 
 
 
