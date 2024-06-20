@@ -11,7 +11,7 @@ import logging
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezdebts.settings')
 django.setup()
 from ezdebts.settings import DATABASES
-from ezdebts_app.models import UserData
+from ezdebts_app.models import Currencies, UserData
 from telegram import Update, MessageEntity
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
@@ -52,6 +52,20 @@ def _splitName(full_name: str) -> list[str]:
 	return names
 
 '''
+Checks if a user's handle exists in the DB
+inputs: string of the user's handle
+outputs: boolean, whether the user is registered in the DB
+'''
+async def _userExists(user_handle: str) -> bool:
+	user_exists = await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
+	return user_exists
+
+async def _currencyExists(currency_code: str) -> bool:
+	currency_code = currency_code.upper()
+	currency_exists = await sync_to_async(Currencies.objects.filter(code=currency_code).exists)()
+	return currency_exists
+
+'''
 Handles the registration of a user in the DB
 inputs: Update, Context
 outputs: None
@@ -75,8 +89,7 @@ async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 		user_last_name = ''
 	
 	# check if user exists in the DB
-	user_exists = await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
-	if user_exists:
+	if _userExists(user_handle):
 		await context.bot.send_message(chat_id=chat_id, text="You have already registered for an account")
 		return
 
@@ -98,18 +111,54 @@ def _filterMentions(message: Message) -> list[str]:
 	for key in mentions_dict:
 		mentions.append(mentions_dict[key])
 	return mentions
-	
-# Checks database for existence of user
+
 '''
 adds an expense to the Expense Model in DB if user calls /addExepnse
 inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
 async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-	#inform user about format to enter expense: <mention> <quantity> <currency>
+	chat_id = update.effective_chat.id
+
+	#inform user about format to enter expense: <mention> <quantity> <currency code>
+
+	# check that user input is formatted correctly
 	message = update.message
+	message_text = message.text
+	message_text_list = message_text.split()
+	print(message)
+	print(type(message))
+	# eg: '/addexpense
+
+	# filter out mentioned users
 	mentions = _filterMentions(message)
-	print(mentions)
+	print(f"mentions: {mentions}")
+	if len(mentions) == 0:
+		await context.bot.send_message(chat_id=chat_id, text="You have 0 valid users mentioned")
+		return
+
+	# filter out expenses metadata
+	currency_code = message_text_list[-1]
+	quantity = message_text_list[-2]
+
+	# check if currency code is valid
+	currency_exists = await _currencyExists(currency_code)
+	if not currency_exists:
+		await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
+		return
+
+	# check for existence of mentioned users
+	for mention in mentions:
+		userExists = await _userExists(mention)
+		if not userExists:
+			await context.bot.send_message(chat_id=chat_id, text=f"{mention} does not have a registered account.")
+			return
+		else:
+			print('all users found')
+
+
+
+
 
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
