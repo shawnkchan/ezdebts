@@ -10,7 +10,16 @@ class UserData(models.Model):
         return f"{self.first_name} {self.last_name} is known as {self.username}"
 
 class Currencies(models.Model):
-    code = models.CharField(max_length=3, unique=True)
+    USD = "USD"
+    SGD = "SGD"
+    GBP = "GBP"
+    currency_options = {
+        (USD, "US Dollar"),
+        (SGD, "Singapore Dollar"),
+        (GBP, "British Pound"),
+    }
+
+    code = models.CharField(max_length=3, choices=currency_options, unique=True)
     name = models.CharField(max_length=50, unique=True)
     symbol = models.CharField(max_length=5, unique=True)
     

@@ -10,8 +10,9 @@ import django
 import logging
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezdebts.settings')
 django.setup()
+from django.shortcuts import get_object_or_404
 from ezdebts.settings import DATABASES
-from ezdebts_app.models import Currencies, UserData
+from ezdebts_app.models import Currencies, Expenses, UserData
 from telegram import Update, MessageEntity
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
@@ -61,7 +62,6 @@ async def _userExists(user_handle: str) -> bool:
 	return user_exists
 
 async def _currencyExists(currency_code: str) -> bool:
-	currency_code = currency_code.upper()
 	currency_exists = await sync_to_async(Currencies.objects.filter(code=currency_code).exists)()
 	return currency_exists
 
@@ -135,7 +135,6 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	for word in message_text_list:
 		if word[0] == '@':
 			tagged_users += 1
-	#create dict of currencies and check for it in this loop
 
 	# filter out mentioned users
 	mentions = _filterMentions(message)
@@ -148,18 +147,18 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		return
 
 	# filter out expenses metadata
-	currency_code = message_text_list[-1]
+	currency_code = message_text_list[-1].upper()
 	quantity = message_text_list[-2]
 
-	# check if currency code is valid
-	currency_exists = await _currencyExists(currency_code)
-	if not currency_exists:
-		await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
-		return
+	# # check if currency code is valid
+	# currency_exists = await _currencyExists(currency_code)
+	# if not currency_exists:
+	# 	await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
+	# 	return
 
-	if type(int(quantity)) != int:
-		await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
-		return
+	# if type(int(quantity)) != int:
+	# 	await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
+	# 	return
 
 	# check for existence of mentioned users
 	for mention in mentions:
@@ -169,8 +168,19 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 			return
 		else:
 			print('all users found')
+	
+	lender_model = await get_object_or_404(UserData, username=message.from_user.username)
+	debtors = mentions
+	quantity_divided = round((quantity / len(mentions)), 2)
+	currency_model = await get_object_or_404(Currencies, code=currency_code)
+	# assuming we split evenly
+	for debtor in debtors:
+		debtor_model = await get_object_or_404(UserData, username=debtor)
+		new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+		await sync_to_async(new_expense.save)()
+	print('expenses added')
+		
 
-	#need to recognise when tags are not entities
 	
 
 
