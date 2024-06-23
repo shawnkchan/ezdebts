@@ -169,13 +169,15 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		else:
 			print('all users found')
 	
-	lender_model = await get_object_or_404(UserData, username=message.from_user.username)
+	print('@' + message.from_user.username)
+
+	lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + message.from_user.username)
 	debtors = mentions
-	quantity_divided = round((quantity / len(mentions)), 2)
-	currency_model = await get_object_or_404(Currencies, code=currency_code)
+	quantity_divided = round((int(quantity) / len(mentions)), 2)
+	currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
 	# assuming we split evenly
 	for debtor in debtors:
-		debtor_model = await get_object_or_404(UserData, username=debtor)
+		debtor_model = await sync_to_async(get_object_or_404)(UserData, username=debtor)
 		new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
 		await sync_to_async(new_expense.save)()
 	print('expenses added')
