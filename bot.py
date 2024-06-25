@@ -40,6 +40,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await context.bot.send_message(chat_id=update.effective_chat.id, text="Unknown command")
 
+# Class based implementation
+class User():
+	def __init__(self) -> None:
+		pass
+
+	def createAccount():
+		pass
+
+	def addExpense():
+		pass
+
 
 # ---USER FUNCTIONS---
 
