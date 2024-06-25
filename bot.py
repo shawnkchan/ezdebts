@@ -3,6 +3,8 @@ from distutils.cmd import Command
 from email.headerregistry import MessageIDHeader
 from email.message import Message
 import os
+import string
+from tokenize import String
 from urllib.request import UnknownHandler
 from dotenv import load_dotenv
 import telegram
@@ -42,14 +44,38 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Class based implementation
 class User():
-	def __init__(self) -> None:
-		pass
+	def __init__(self, user: telegram.User) -> None:
+		self.user_id = user.id
+		self.user_handle = user.name
+		self.user_full_name = user.full_name
+		self.user_first_name = ''
+		self.user_last_name = ''
 
-	def createAccount():
-		pass
+	async def _checkIfUserExists(user_handle: str) -> bool:
+		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
 
-	def addExpense():
-		pass
+	async def createAccount(self):
+		user_full_name_list = self.user_full_name.split()
+		if len(user_full_name_list) > 1:
+			self.user_last_name = user_full_name_list[-1]
+		self.user_first_name = user_full_name_list[0]
+
+		user_exists = await self._checkIfUserExists(self.user_handle)
+		if user_exists:
+			return "You have already registered for an account"
+
+		new_account = UserData(id=self.user_id, first_name=self.user_first_name, last_name=self.user_last_name, username=self.user_handle)
+		await sync_to_async(new_account.save())
+
+	async def addDebtors(self, message: string):
+		# check formatting before sending it to this function
+		message_list = message.split()
+		tagged_users_count = self._countTaggedUsers(message_list)
+		mentions_list = self._returnMentionsList()
+		if not mentions_list:
+			return "You have 0 valid users mentioned" 
+		if len(mentions_list) < tagged_users_count:
+			return "Non-existent user tagged"
 
 
 # ---USER FUNCTIONS---
