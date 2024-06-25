@@ -13,7 +13,7 @@ django.setup()
 from django.shortcuts import get_object_or_404
 from ezdebts.settings import DATABASES
 from ezdebts_app.models import Currencies, Expenses, UserData
-from telegram import Update, MessageEntity
+from telegram import Update, MessageEntity, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
 
@@ -39,6 +39,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await context.bot.send_message(chat_id=update.effective_chat.id, text="Unknown command")
+
 
 # ---USER FUNCTIONS---
 
@@ -150,15 +151,15 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	currency_code = message_text_list[-1].upper()
 	quantity = message_text_list[-2]
 
-	# # check if currency code is valid
-	# currency_exists = await _currencyExists(currency_code)
-	# if not currency_exists:
-	# 	await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
-	# 	return
+	# check if currency code is valid
+	currency_exists = await _currencyExists(currency_code)
+	if not currency_exists:
+		await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
+		return
 
-	# if type(int(quantity)) != int:
-	# 	await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
-	# 	return
+	if type(int(quantity)) != int:
+		await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
+		return
 
 	# check for existence of mentioned users
 	for mention in mentions:
@@ -182,14 +183,7 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await sync_to_async(new_expense.save)()
 	print('expenses added')
 		
-
 	
-
-
-
-
-
-
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
 	
