@@ -1,7 +1,10 @@
+from cgitb import text
+import code
 from contextvars import Context
 from distutils.cmd import Command
 from email.headerregistry import MessageIDHeader
 from email.message import Message
+from locale import currency
 import os
 import string
 from tokenize import String
@@ -43,13 +46,23 @@ async def unknown(update: Update, context: ContextTypes.DEFAULT_TYPE):
 	await context.bot.send_message(chat_id=update.effective_chat.id, text="Unknown command")
 
 # Class based implementation
+class ContextBot():
+	def __init__(self, bot: telegram.Bot, chatId: int) -> None:
+		self.bot = bot
+		self.chatId = chatId
+
+	def sendMessage(self, message: string):
+		self.bot.send_message(chat_id=self.chatId, text=message)
+
+
 class User():
-	def __init__(self, user: telegram.User) -> None:
+	def __init__(self, user: telegram.User, ContextBot: ContextBot) -> None:
 		self.user_id = user.id
 		self.user_handle = user.name
 		self.user_full_name = user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
+		self.ContextBot = ContextBot
 
 	async def _checkIfUserExists(user_handle: str) -> bool:
 		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
@@ -62,20 +75,48 @@ class User():
 
 		user_exists = await self._checkIfUserExists(self.user_handle)
 		if user_exists:
-			return "You have already registered for an account"
+			self.ContextBot.sendMessage("You have already registered for an account")
 
 		new_account = UserData(id=self.user_id, first_name=self.user_first_name, last_name=self.user_last_name, username=self.user_handle)
 		await sync_to_async(new_account.save())
 
-	async def addDebtors(self, message: string):
+	async def _returnNonExistentMention(self, mentions: list) -> list:
+		for mention in mentions:
+			user_exists = await self._checkIfUserExists(mention)
+			if user_exists:
+				mentions.remove(mention)
+		return mentions
+		
+
+	async def addDebts(self, mentions: list, debt: list):
 		# check formatting before sending it to this function
-		message_list = message.split()
-		tagged_users_count = self._countTaggedUsers(message_list)
-		mentions_list = self._returnMentionsList()
-		if not mentions_list:
-			return "You have 0 valid users mentioned" 
-		if len(mentions_list) < tagged_users_count:
-			return "Non-existent user tagged"
+
+		# move this error checking to outside the function
+		# message_list = message.split()
+		# tagged_users_count = self._countTaggedUsers(message_list)
+		# mentions_list = self._returnMentionsList()
+		# if not mentions_list:
+		# 	return "You have 0 valid users mentioned" 
+		# if len(mentions_list) < tagged_users_count:
+		# 	return "Non-existent user tagged"
+		
+		if len(self._returnNonExistentMention(mentions)) != 0:
+			missing_mentions = ' '.join(mentions)
+			self.ContextBot.sendMessage(f"Unable to add expense. {missing_mentions} do not have registered accounts.")
+		else:
+			quantity = debt[0]
+			currency_code = debt[1]
+			lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + self.user_handle)
+			quantity_divided = round((int(quantity) / len(mentions)), 2)
+			currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+			for mention in mentions:
+				debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
+				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+				await sync_to_async(new_expense.save)()
+			
+			
+				
+		
 
 
 # ---USER FUNCTIONS---
