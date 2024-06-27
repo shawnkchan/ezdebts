@@ -56,10 +56,10 @@ class ContextBot():
 
 
 class User():
-	def __init__(self, user: telegram.User, ContextBot: ContextBot) -> None:
-		self.user_id = user.id
-		self.user_handle = user.name
-		self.user_full_name = user.full_name
+	def __init__(self, telegram_user: telegram.User, ContextBot: ContextBot) -> None:
+		self.user_id = telegram_user.id
+		self.user_handle = telegram_user.name
+		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
 		self.ContextBot = ContextBot
@@ -123,143 +123,90 @@ class User():
 
 #  ---CREATE ACCOUNT---
 '''
-Splits a string into a list of words
-inputs: string of words
-outputs: list of individual words as strings
-'''
-def _splitName(full_name: str) -> list[str]:
-	names = full_name.split()
-	return names
-
-'''
-Checks if a user's handle exists in the DB
-inputs: string of the user's handle
-outputs: boolean, whether the user is registered in the DB
-'''
-async def _userExists(user_handle: str) -> bool:
-	user_exists = await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
-	return user_exists
-
-async def _currencyExists(currency_code: str) -> bool:
-	currency_exists = await sync_to_async(Currencies.objects.filter(code=currency_code).exists)()
-	return currency_exists
-
-'''
 Handles the registration of a user in the DB
 inputs: Update, Context
 outputs: None
 '''
 async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-	# chat metadata
-	chat_id = update.effective_chat.id
-	user = update.effective_user
+	telegram_user = update.effective_user
+	chat_id = update.effective_chat
+	bot = context.bot
 
-	# user variables
-	user_id = user.id
-	user_handle = user.name
-	user_full_name = user.full_name
-	user_full_name_list = _splitName(user_full_name)
-	user_first_name = user_full_name_list[0]
+	context_bot = ContextBot(bot, chat_id)
+	current_user = User(telegram_user, context_bot)
+	current_user.createAccount()
 
-	# retrieve the user's last name
-	if len(user_full_name_list) > 1:
-		user_last_name = user_full_name_list[-1]
-	else:
-		user_last_name = ''
-	
-	# check if user exists in the DB
-	userExists = await _userExists(user_handle)
-	if userExists:
-		await context.bot.send_message(chat_id=chat_id, text="You have already registered for an account")
-		return
-
-	new_account = UserData(id=user_id, first_name=user_first_name, last_name=user_last_name, username=user_handle)
-
-	await sync_to_async(new_account.save)()
-	logging.info("added new account to db")
-	await context.bot.send_message(chat_id=chat_id, text="You have successfully registered an account!")
 
 # ---ADD EXPENSE---
-'''
-Filters out any mentions in the text
-inputs: Update object containing the message data
-output: List of Mentions 
-'''
-def _filterMentions(message: Message) -> list[str]:
-	mentions = []
-	mentions_dict = message.parse_entities(['mention', 'text_mention'])
-	for key in mentions_dict:
-		mentions.append(mentions_dict[key])
-	return mentions
-
 '''
 adds an expense to the Expense Model in DB if user calls /addExepnse
 inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
 async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-	chat_id = update.effective_chat.id
+	pass
+	# chat_id = update.effective_chat.id
 
-	#inform user about format to enter expense: <mention> <quantity> <currency code>
+	# #inform user about format to enter expense: <mention> <quantity> <currency code>
 
-	# check that user input is formatted correctly
-	message = update.message
-	message_text = message.text
-	message_text_list = message_text.split()
-	print(message)
-	print(type(message))
+	# # check that user input is formatted correctly
+	# message = update.message
+	# message_text = message.text
+	# message_text_list = message_text.split()
+	# print(message)
+	# print(type(message))
 	
-	# count number of intended mentions
-	tagged_users = 0
-	for word in message_text_list:
-		if word[0] == '@':
-			tagged_users += 1
+	# # count number of intended mentions
+	# tagged_users = 0
+	# for word in message_text_list:
+	# 	if word[0] == '@':
+	# 		tagged_users += 1
 
-	# filter out mentioned users
-	mentions = _filterMentions(message)
-	print(f"mentions: {mentions}")
-	if len(mentions) == 0:
-		await context.bot.send_message(chat_id=chat_id, text="You have 0 valid users mentioned")
-		return
-	if len(mentions) < tagged_users:
-		await context.bot.send_message(chat_id=chat_id, text="Non-existent user tagged")
-		return
+	# # filter out mentioned users
+	# mentions = _filterMentions(message)
+	# print(f"mentions: {mentions}")
+	# if len(mentions) == 0:
+	# 	await context.bot.send_message(chat_id=chat_id, text="You have 0 valid users mentioned")
+	# 	return
+	# if len(mentions) < tagged_users:
+	# 	await context.bot.send_message(chat_id=chat_id, text="Non-existent user tagged")
+	# 	return
 
-	# filter out expenses metadata
-	currency_code = message_text_list[-1].upper()
-	quantity = message_text_list[-2]
+	# # filter out expenses metadata
+	# currency_code = message_text_list[-1].upper()
+	# quantity = message_text_list[-2]
 
-	# check if currency code is valid
-	currency_exists = await _currencyExists(currency_code)
-	if not currency_exists:
-		await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
-		return
+	# # check if currency code is valid
+	# currency_exists = await _currencyExists(currency_code)
+	# if not currency_exists:
+	# 	await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
+	# 	return
 
-	if type(int(quantity)) != int:
-		await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
-		return
+	# if type(int(quantity)) != int:
+	# 	await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
+	# 	return
 
-	# check for existence of mentioned users
-	for mention in mentions:
-		userExists = await _userExists(mention)
-		if not userExists:
-			await context.bot.send_message(chat_id=chat_id, text=f"{mention} does not have a registered account.")
-			return
-		else:
-			print('all users found')
+	# # check for existence of mentioned users
+	# for mention in mentions:
+	# 	userExists = await _userExists(mention)
+	# 	if not userExists:
+	# 		await context.bot.send_message(chat_id=chat_id, text=f"{mention} does not have a registered account.")
+	# 		return
+	# 	else:
+	# 		print('all users found')
 	
-	print('@' + message.from_user.username)
+	# print('@' + message.from_user.username)
 
-	lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + message.from_user.username)
-	debtors = mentions
-	quantity_divided = round((int(quantity) / len(mentions)), 2)
-	currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
-	# assuming we split evenly
-	for debtor in debtors:
-		debtor_model = await sync_to_async(get_object_or_404)(UserData, username=debtor)
-		new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
-		await sync_to_async(new_expense.save)()
-	print('expenses added')
+	# lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + message.from_user.username)
+	# debtors = mentions
+	# quantity_divided = round((int(quantity) / len(mentions)), 2)
+	# currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+	# # assuming we split evenly
+	# for debtor in debtors:
+	# 	debtor_model = await sync_to_async(get_object_or_404)(UserData, username=debtor)
+	# 	new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+	# 	await sync_to_async(new_expense.save)()
+	# print('expenses added')
 		
 	
 if __name__ == '__main__':
