@@ -156,7 +156,7 @@ async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 	bot = context.bot
 
 	context_bot = ContextBot(bot, chat_id)
-	current_user = User(telegram_user, context_bot)
+	current_user = User(telegram_user)
 	success = await current_user.createAccount()
 	if not success:
 		await context_bot.sendMessage(f"The user {current_user.user_handle} already has an account with EzDebts")
