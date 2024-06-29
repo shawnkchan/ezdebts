@@ -67,6 +67,33 @@ class ContextBot():
 # class MessageFactoryInterface():
 # 	pass
 
+class MentionsChecker():
+	def __init__(self, message: telegram.Message) -> None:
+		self.tagged_users_count = 0
+		self.mentioned_users = []
+		self.mentioned_users_count = 0
+		self.message = message
+		self.message_list = message.text.split()
+	
+	def _countIntendedMentions(self) -> int:
+		for word in self.message_list:
+			if word[0] == '@':
+				self.tagged_users_count += 1
+
+	def _countActualMentionsCount(self) -> int:
+		mentions_dict = self.message.parse_entities(['mention', 'text_mention'])
+		for key in mentions_dict:
+			self.mentioned_users.append(mentions_dict[key])
+			self.mentioned_users_count += 1
+
+	def allValidMentions(self):
+		self._countActualMentionsCount()
+		self._countIntendedMentions()
+		if self.mentioned_users_count != self.tagged_users_count:
+			return False
+		return True
+
+
 class User():
 	def __init__(self, telegram_user: telegram.User, ContextBot: ContextBot) -> None:
 		self.user_id = telegram_user.id
@@ -139,18 +166,8 @@ adds an expense to the Expense Model in DB if user calls /addExepnse
 inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
-def returnIntendMentionsCount(message_list: list) -> int:
-	tagged_users = 0
-	for word in message_list:
-		if word[0] == '@':
-			tagged_users += 1
-	return tagged_users
 
-def returnActualMentionsCount(message: telegram.Message) -> int:
-	mentions_dict = message.parse_entities(['mention', 'text_mention'])
-	pass
-
-def checkExpenseMessage(message_list: list):
+def _checkExpenseMessage(message_list: list):
 	pass
 
 async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -158,12 +175,14 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	chat_id = update.effective_chat.id
 	bot = context.bot
 	message = update.message
-	message_text = message.text
-	message_text_list = message_text.split()
-
 
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user, context_bot)
+	mentions_checker = MentionsChecker(message)
+
+	if not mentions_checker.allValidMentions():
+		await context_bot.sendMessage("An invalid user had been tagged")
+
 	await current_user.addDebts()
 	# chat_id = update.effective_chat.id
 
