@@ -22,6 +22,7 @@ from ezdebts_app.models import Currencies, Expenses, UserData
 from telegram import Update, MessageEntity, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
+import numbers
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -169,23 +170,41 @@ inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
 
-def _checkExpenseMessage(message_list: list):
-	pass
+# async def _returnedErrorIfInvalidInstruction(message: telegram.Message) -> str:
+# 	currency_code = message[-1]
+# 	quantity = message[-2]
+
+# 	mentions_checker = MentionsChecker(message)
+
+# 	if not mentions_checker.allValidMentions():
+# 		return "An invalid user has been tagged"
+# 	currency_exists = await sync_to_async(Currencies.objects.filter(code=currency_code).exists)()
+
+# 	if not currency_exists:
+# 		return "The given currency code is not valid"
+
+# 	if type(quantity) != numbers.Number:
+# 		return "The given quantity is not a number"
+	
+# 	return None
 
 async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	# expected format: <command> <mention> <quantity> <currency code>
 	telegram_user = update.effective_user
 	chat_id = update.effective_chat.id
 	bot = context.bot
 	message = update.message
+	message_list = message.text.split()
 
 	context_bot = ContextBot(bot, chat_id)
-	current_user = User(telegram_user, context_bot)
+	current_user = User(telegram_user)
 	mentions_checker = MentionsChecker(message)
+	debt = message_list[-2 : ]
 
 	if not mentions_checker.allValidMentions():
-		await context_bot.sendMessage("An invalid user had been tagged")
+		await context_bot.sendMessage("An invalid user has been tagged")
 
-	nonExistentMentions = await current_user.addDebts()
+	nonExistentMentions = await current_user.addDebts(mentions_checker.mentioned_users, debt)
 	if nonExistentMentions:
 		await context_bot.sendMessage(f"The users {nonExistentMentions} do not have registered EzDebts accounts")
 	# chat_id = update.effective_chat.id
