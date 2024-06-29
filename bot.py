@@ -27,7 +27,7 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 logging.basicConfig(
 	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-	level=logging.WARNING
+	level=logging.DEBUG
 )
 
 # DEMO FUNCTIONS
@@ -51,9 +51,21 @@ class ContextBot():
 		self.bot = bot
 		self.chatId = chatId
 
-	def sendMessage(self, message: string):
-		self.bot.send_message(chat_id=self.chatId, text=message)
+	async def sendMessage(self, message: string):
+		await self.bot.send_message(chat_id=self.chatId, text=message)
+		logging.debug("Error message sent")
 
+# class createAccountMessage():
+# 	pass
+
+# class DebtMessage():
+# 	def __init__(self) -> None:
+# 		pass
+	
+# 	def return
+
+# class MessageFactoryInterface():
+# 	pass
 
 class User():
 	def __init__(self, telegram_user: telegram.User, ContextBot: ContextBot) -> None:
@@ -64,7 +76,7 @@ class User():
 		self.user_last_name = ''
 		self.ContextBot = ContextBot
 
-	async def _checkIfUserExists(user_handle: str) -> bool:
+	async def _checkIfUserExists(self, user_handle: str) -> bool:
 		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
 
 	async def createAccount(self):
@@ -75,10 +87,10 @@ class User():
 
 		user_exists = await self._checkIfUserExists(self.user_handle)
 		if user_exists:
-			self.ContextBot.sendMessage("You have already registered for an account")
+			await self.ContextBot.sendMessage("You have already registered for an account")
 
 		new_account = UserData(id=self.user_id, first_name=self.user_first_name, last_name=self.user_last_name, username=self.user_handle)
-		await sync_to_async(new_account.save())
+		await sync_to_async(new_account.save)()
 
 	async def _returnNonExistentMention(self, mentions: list) -> list:
 		for mention in mentions:
@@ -86,23 +98,11 @@ class User():
 			if user_exists:
 				mentions.remove(mention)
 		return mentions
-		
 
 	async def addDebts(self, mentions: list, debt: list):
-		# check formatting before sending it to this function
-
-		# move this error checking to outside the function
-		# message_list = message.split()
-		# tagged_users_count = self._countTaggedUsers(message_list)
-		# mentions_list = self._returnMentionsList()
-		# if not mentions_list:
-		# 	return "You have 0 valid users mentioned" 
-		# if len(mentions_list) < tagged_users_count:
-		# 	return "Non-existent user tagged"
-		
 		if len(self._returnNonExistentMention(mentions)) != 0:
 			missing_mentions = ' '.join(mentions)
-			self.ContextBot.sendMessage(f"Unable to add expense. {missing_mentions} do not have registered accounts.")
+			await self.ContextBot.sendMessage(f"Unable to add expense. {missing_mentions} do not have registered accounts.")
 		else:
 			quantity = debt[0]
 			currency_code = debt[1]
@@ -114,10 +114,6 @@ class User():
 				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
 				await sync_to_async(new_expense.save)()
 			
-			
-				
-		
-
 
 # ---USER FUNCTIONS---
 
@@ -129,12 +125,12 @@ outputs: None
 '''
 async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	telegram_user = update.effective_user
-	chat_id = update.effective_chat
+	chat_id = update.effective_chat.id
 	bot = context.bot
 
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user, context_bot)
-	current_user.createAccount()
+	await current_user.createAccount()
 
 
 # ---ADD EXPENSE---
@@ -143,8 +139,32 @@ adds an expense to the Expense Model in DB if user calls /addExepnse
 inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
-async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+def returnIntendMentionsCount(message_list: list) -> int:
+	tagged_users = 0
+	for word in message_list:
+		if word[0] == '@':
+			tagged_users += 1
+	return tagged_users
+
+def returnActualMentionsCount(message: telegram.Message) -> int:
+	mentions_dict = message.parse_entities(['mention', 'text_mention'])
 	pass
+
+def checkExpenseMessage(message_list: list):
+	pass
+
+async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	telegram_user = update.effective_user
+	chat_id = update.effective_chat.id
+	bot = context.bot
+	message = update.message
+	message_text = message.text
+	message_text_list = message_text.split()
+
+
+	context_bot = ContextBot(bot, chat_id)
+	current_user = User(telegram_user, context_bot)
+	await current_user.addDebts()
 	# chat_id = update.effective_chat.id
 
 	# #inform user about format to enter expense: <mention> <quantity> <currency code>
