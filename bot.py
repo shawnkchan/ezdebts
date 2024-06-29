@@ -9,6 +9,7 @@ import os
 import string
 from tokenize import String
 from urllib.request import UnknownHandler
+from xmlrpc.client import boolean
 from dotenv import load_dotenv
 import telegram
 import django
@@ -95,13 +96,12 @@ class MentionsChecker():
 
 
 class User():
-	def __init__(self, telegram_user: telegram.User, ContextBot: ContextBot) -> None:
+	def __init__(self, telegram_user: telegram.User) -> None:
 		self.user_id = telegram_user.id
 		self.user_handle = telegram_user.name
 		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
-		self.ContextBot = ContextBot
 
 	async def _checkIfUserExists(self, user_handle: str) -> bool:
 		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
@@ -114,22 +114,22 @@ class User():
 
 		user_exists = await self._checkIfUserExists(self.user_handle)
 		if user_exists:
-			await self.ContextBot.sendMessage("You have already registered for an account")
+			return False
 
 		new_account = UserData(id=self.user_id, first_name=self.user_first_name, last_name=self.user_last_name, username=self.user_handle)
 		await sync_to_async(new_account.save)()
+		return True
 
-	async def _returnNonExistentMention(self, mentions: list) -> list:
+	async def _returnNonExistentMentions(self, mentions: list) -> list:
 		for mention in mentions:
 			user_exists = await self._checkIfUserExists(mention)
 			if user_exists:
 				mentions.remove(mention)
 		return mentions
 
-	async def addDebts(self, mentions: list, debt: list):
-		if len(self._returnNonExistentMention(mentions)) != 0:
-			missing_mentions = ' '.join(mentions)
-			await self.ContextBot.sendMessage(f"Unable to add expense. {missing_mentions} do not have registered accounts.")
+	async def addDebts(self, mentions: list, debt: list) -> list:
+		if len(self._returnNonExistentMentions(mentions)) != 0:
+			return mentions
 		else:
 			quantity = debt[0]
 			currency_code = debt[1]
@@ -140,7 +140,7 @@ class User():
 				debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
 				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
 				await sync_to_async(new_expense.save)()
-			
+			return []
 
 # ---USER FUNCTIONS---
 
@@ -157,7 +157,9 @@ async def createAccount(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user, context_bot)
-	await current_user.createAccount()
+	success = await current_user.createAccount()
+	if not success:
+		await context_bot.sendMessage(f"The user {current_user.user_handle} already has an account with EzDebts")
 
 
 # ---ADD EXPENSE---
@@ -183,7 +185,9 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	if not mentions_checker.allValidMentions():
 		await context_bot.sendMessage("An invalid user had been tagged")
 
-	await current_user.addDebts()
+	nonExistentMentions = await current_user.addDebts()
+	if nonExistentMentions:
+		await context_bot.sendMessage(f"The users {nonExistentMentions} do not have registered EzDebts accounts")
 	# chat_id = update.effective_chat.id
 
 	# #inform user about format to enter expense: <mention> <quantity> <currency code>
