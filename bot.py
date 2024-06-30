@@ -95,6 +95,17 @@ class MentionsChecker():
 			return False
 		return True
 
+	async def _checkIfUserExists(self, user_handle: str) -> bool:
+		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
+
+	async def returnNonExistentUsers(self) -> list:
+		logging.debug(self.mentioned_users)
+		mentions = self.mentioned_users.copy()
+		for mention in self.mentioned_users:
+			user_exists = await self._checkIfUserExists(mention)
+			if user_exists:
+				mentions.remove(mention)
+		return mentions
 
 class User():
 	def __init__(self, telegram_user: telegram.User) -> None:
@@ -103,9 +114,6 @@ class User():
 		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
-
-	async def _checkIfUserExists(self, user_handle: str) -> bool:
-		return await sync_to_async(UserData.objects.filter(username=user_handle).exists)()
 
 	async def createAccount(self):
 		user_full_name_list = self.user_full_name.split()
@@ -121,27 +129,20 @@ class User():
 		await sync_to_async(new_account.save)()
 		return True
 
-	async def _returnNonExistentMentions(self, mentions: list) -> list:
-		for mention in mentions:
-			user_exists = await self._checkIfUserExists(mention)
-			if user_exists:
-				mentions.remove(mention)
-		return mentions
 
-	async def addDebts(self, mentions: list, debt: list) -> list:
-		if len(self._returnNonExistentMentions(mentions)) != 0:
-			return mentions
-		else:
-			quantity = debt[0]
-			currency_code = debt[1]
-			lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + self.user_handle)
-			quantity_divided = round((int(quantity) / len(mentions)), 2)
-			currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
-			for mention in mentions:
-				debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
-				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
-				await sync_to_async(new_expense.save)()
-			return []
+
+	async def addDebts(self, mentions: list, debt: list):
+		logging.debug('adding debts')
+		quantity = debt[0]
+		currency_code = debt[1].upper()
+		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+		quantity_divided = round((int(quantity) / len(mentions)), 2)
+		currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+		for mention in mentions:
+			debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
+			new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+			await sync_to_async(new_expense.save)()
+			logging.debug(f'added debt for {mention}')
 
 # ---USER FUNCTIONS---
 
@@ -204,9 +205,13 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	if not mentions_checker.allValidMentions():
 		await context_bot.sendMessage("An invalid user has been tagged")
 
-	nonExistentMentions = await current_user.addDebts(mentions_checker.mentioned_users, debt)
+	nonExistentMentions = await mentions_checker.returnNonExistentUsers()
 	if nonExistentMentions:
-		await context_bot.sendMessage(f"The users {nonExistentMentions} do not have registered EzDebts accounts")
+		nonExistentMentionsString = ",".join(nonExistentMentions)
+		await context_bot.sendMessage(f"The users {nonExistentMentionsString} do not have registered EzDebts accounts")
+	else:
+		await current_user.addDebts(mentions_checker.mentioned_users, debt)
+		logging.debug("Successfully added debt")
 	# chat_id = update.effective_chat.id
 
 	# #inform user about format to enter expense: <mention> <quantity> <currency code>
