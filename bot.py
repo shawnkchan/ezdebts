@@ -1,15 +1,9 @@
-from cgitb import text
-import code
 from contextvars import Context
 from distutils.cmd import Command
 from email.headerregistry import MessageIDHeader
 from email.message import Message
-from locale import currency
 import os
 import string
-from tokenize import String
-from urllib.request import UnknownHandler
-from xmlrpc.client import boolean
 from dotenv import load_dotenv
 import telegram
 import django
@@ -17,12 +11,11 @@ import logging
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezdebts.settings')
 django.setup()
 from django.shortcuts import get_object_or_404
-from ezdebts.settings import DATABASES
 from ezdebts_app.models import Currencies, Expenses, UserData
 from telegram import Update, MessageEntity, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
-import numbers
+from django.db.models import F
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
@@ -129,6 +122,19 @@ class User():
 		await sync_to_async(new_account.save)()
 		return True
 
+	'''Check DB for any existing debts between lender and debtors. 
+	If present, accumualte debts in the same row
+	'''
+	async def debtExists(self, lender_username: str, debtor_username: str, currency_code: str):
+		lender = await sync_to_async(UserData.objects.get)(username=lender_username)
+		debtor = await sync_to_async(UserData.objects.get)(username=debtor_username)
+		currency = await sync_to_async(Currencies.objects.get)(code=currency_code)
+		
+		# Use filter with exists on the QuerySet
+		debt_exists = await sync_to_async(Expenses.objects.filter(
+			lender=lender, debtor=debtor, currency=currency
+		).exists)()
+		return debt_exists
 
 
 	async def addDebts(self, mentions: list, debt: list):
@@ -138,11 +144,18 @@ class User():
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		quantity_divided = round((int(quantity) / len(mentions)), 2)
 		currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+
 		for mention in mentions:
 			debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
-			new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
-			await sync_to_async(new_expense.save)()
-			logging.debug(f'added debt for {mention}')
+			debt_exists = await self.debtExists(self.user_handle, mention, currency_code)
+			if debt_exists:
+				edited_expense = await sync_to_async(Expenses.objects.get)(lender=lender_model, debtor=debtor_model, currency=currency_model)
+				await sync_to_async(Expenses.objects.filter(pk=edited_expense.pk).update)(quantity=F('quantity') + quantity_divided)
+				logging.debug(f'update {currency_code} debt for {mention}')
+			else:
+				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+				await sync_to_async(new_expense.save)()
+				logging.debug(f'added debt for {mention}')
 
 # ---USER FUNCTIONS---
 
