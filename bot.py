@@ -161,10 +161,11 @@ class User():
 				await sync_to_async(new_expense.save)()
 				logging.debug(f'added debt for {mention}')
 
-	# creates a dictionary of debtors
-	# key = str debtor__username
-	# value = list of str(<quantity> <currency>)
-	def formatDebtors(self, debtors: list):
+	'''
+	Creates a dictionary of debtors in the following format:
+	dict[str <debtor__username>] = [str(<quantity> <currency>)]
+	'''
+	def _createDebtorsDict(self, debtors: list):
 		indiv_debtors_dict = {}
 		for debtor in debtors:
 			username = debtor['debtor__username']
@@ -179,6 +180,18 @@ class User():
 			indiv_debtors_dict[username].append(debt_details)
 		return indiv_debtors_dict
 
+	def _createFormattedMessage(self, indiv_debtors_dict: dict) -> str:
+		formatted_debtors_message = []
+
+		for username in indiv_debtors_dict:
+			formatted_debtors_message.append(username + ':\n')
+			for debt in indiv_debtors_dict[username]:
+				formatted_debtors_message.append(debt + '\n')
+			formatted_debtors_message.append('\n')
+
+		formatted_debtors_message_string = ''.join(formatted_debtors_message)
+		return formatted_debtors_message_string
+
 	'''
 	Lets a user view their debtors
 	'''
@@ -188,8 +201,9 @@ class User():
 		debtors = await sync_to_async(list)(
             Expenses.objects.filter(lender=lender_model).values('debtor__username', 'quantity', 'currency__code')
         )
-		indiv_debtors_dict = self.formatDebtors(debtors)
-		return indiv_debtors_dict
+		indiv_debtors_dict = self._createDebtorsDict(debtors)
+		view_debtors_as_string = self._createFormattedMessage(indiv_debtors_dict)
+		return view_debtors_as_string
 
 	'''
 	Lets a user view their lenders
@@ -257,17 +271,9 @@ async def viewDebtors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user)
 
-	indiv_debtors_dict = await current_user.viewDebtors()
-	formatted_debtors_message = []
-
-	for username in indiv_debtors_dict:
-		formatted_debtors_message.append(username + ':\n')
-		for debt in indiv_debtors_dict[username]:
-			formatted_debtors_message.append(debt + '\n')
-		formatted_debtors_message.append('\n')
-	formatted_debtors_message_string = ''.join(formatted_debtors_message)
-	await context_bot.sendMessage(formatted_debtors_message_string)
-	# await context_bot.sendMessage(debtors_vals)
+	view_debtors_as_string = await current_user.viewDebtors()
+	
+	await context_bot.sendMessage(view_debtors_as_string)
 	
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
