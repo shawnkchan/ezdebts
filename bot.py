@@ -171,24 +171,6 @@ inputs: Update, ContextType
 outputs: NIL, updates the DB
 '''
 
-# async def _returnedErrorIfInvalidInstruction(message: telegram.Message) -> str:
-# 	currency_code = message[-1]
-# 	quantity = message[-2]
-
-# 	mentions_checker = MentionsChecker(message)
-
-# 	if not mentions_checker.allValidMentions():
-# 		return "An invalid user has been tagged"
-# 	currency_exists = await sync_to_async(Currencies.objects.filter(code=currency_code).exists)()
-
-# 	if not currency_exists:
-# 		return "The given currency code is not valid"
-
-# 	if type(quantity) != numbers.Number:
-# 		return "The given quantity is not a number"
-	
-# 	return None
-
 async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	# expected format: <command> <mention> <quantity> <currency code>
 	telegram_user = update.effective_user
@@ -212,69 +194,6 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 	else:
 		await current_user.addDebts(mentions_checker.mentioned_users, debt)
 		logging.debug("Successfully added debt")
-	# chat_id = update.effective_chat.id
-
-	# #inform user about format to enter expense: <mention> <quantity> <currency code>
-
-	# # check that user input is formatted correctly
-	# message = update.message
-	# message_text = message.text
-	# message_text_list = message_text.split()
-	# print(message)
-	# print(type(message))
-	
-	# # count number of intended mentions
-	# tagged_users = 0
-	# for word in message_text_list:
-	# 	if word[0] == '@':
-	# 		tagged_users += 1
-
-	# # filter out mentioned users
-	# mentions = _filterMentions(message)
-	# print(f"mentions: {mentions}")
-	# if len(mentions) == 0:
-	# 	await context.bot.send_message(chat_id=chat_id, text="You have 0 valid users mentioned")
-	# 	return
-	# if len(mentions) < tagged_users:
-	# 	await context.bot.send_message(chat_id=chat_id, text="Non-existent user tagged")
-	# 	return
-
-	# # filter out expenses metadata
-	# currency_code = message_text_list[-1].upper()
-	# quantity = message_text_list[-2]
-
-	# # check if currency code is valid
-	# currency_exists = await _currencyExists(currency_code)
-	# if not currency_exists:
-	# 	await context.bot.send_message(chat_id=chat_id, text=f"{currency_code} is not a valid currency code")
-	# 	return
-
-	# if type(int(quantity)) != int:
-	# 	await context.bot.send_message(chat_id=chat_id, text="No value detected. Please input a quantity")
-	# 	return
-
-	# # check for existence of mentioned users
-	# for mention in mentions:
-	# 	userExists = await _userExists(mention)
-	# 	if not userExists:
-	# 		await context.bot.send_message(chat_id=chat_id, text=f"{mention} does not have a registered account.")
-	# 		return
-	# 	else:
-	# 		print('all users found')
-	
-	# print('@' + message.from_user.username)
-
-	# lender_model = await sync_to_async(get_object_or_404)(UserData, username='@' + message.from_user.username)
-	# debtors = mentions
-	# quantity_divided = round((int(quantity) / len(mentions)), 2)
-	# currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
-	# # assuming we split evenly
-	# for debtor in debtors:
-	# 	debtor_model = await sync_to_async(get_object_or_404)(UserData, username=debtor)
-	# 	new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
-	# 	await sync_to_async(new_expense.save)()
-	# print('expenses added')
-		
 	
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
