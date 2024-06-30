@@ -1,15 +1,9 @@
-from cgitb import text
-import code
 from contextvars import Context
 from distutils.cmd import Command
 from email.headerregistry import MessageIDHeader
 from email.message import Message
-from locale import currency
 import os
 import string
-from tokenize import String
-from urllib.request import UnknownHandler
-from xmlrpc.client import boolean
 from dotenv import load_dotenv
 import telegram
 import django
@@ -17,18 +11,16 @@ import logging
 os.environ.setdefault('DJANGO_SETTINGS_MODULE', 'ezdebts.settings')
 django.setup()
 from django.shortcuts import get_object_or_404
-from ezdebts.settings import DATABASES
 from ezdebts_app.models import Currencies, Expenses, UserData
 from telegram import Update, MessageEntity, KeyboardButton, ReplyKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, CallbackContext, ApplicationBuilder, ContextTypes, MessageHandler, filters
 from asgiref.sync import sync_to_async
-import numbers
+from django.db.models import F
 
 load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 logging.basicConfig(
-	format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 	level=logging.DEBUG
 )
 
@@ -129,8 +121,26 @@ class User():
 		await sync_to_async(new_account.save)()
 		return True
 
+	'''Check DB for any existing debts of the same currency between lender and debtors.
+	'''
+	async def debtExists(self, lender_username: str, debtor_username: str, currency_code: str):
+		lender = await sync_to_async(UserData.objects.get)(username=lender_username)
+		debtor = await sync_to_async(UserData.objects.get)(username=debtor_username)
+		currency = await sync_to_async(Currencies.objects.get)(code=currency_code)
+		
+		# Use filter with exists on the QuerySet
+		debt_exists = await sync_to_async(Expenses.objects.filter(
+			lender=lender, debtor=debtor, currency=currency
+		).exists)()
+		return debt_exists
 
-
+	'''
+	Adds a debt to the DB. 
+	Assumes that debt is equally split amongst all mentions (not including the user adding the debt)
+	If an existing debt relation exists in the same currency, the debt is updated.
+	Else, a new debt is created
+	TODO: Add function that enables debts to be split equally, unequally, or by a user specified fraction
+	'''
 	async def addDebts(self, mentions: list, debt: list):
 		logging.debug('adding debts')
 		quantity = debt[0]
@@ -138,11 +148,54 @@ class User():
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		quantity_divided = round((int(quantity) / len(mentions)), 2)
 		currency_model = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+
 		for mention in mentions:
 			debtor_model = await sync_to_async(get_object_or_404)(UserData, username=mention)
-			new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
-			await sync_to_async(new_expense.save)()
-			logging.debug(f'added debt for {mention}')
+			debt_exists = await self.debtExists(self.user_handle, mention, currency_code)
+			if debt_exists:
+				edited_expense = await sync_to_async(Expenses.objects.get)(lender=lender_model, debtor=debtor_model, currency=currency_model)
+				await sync_to_async(Expenses.objects.filter(pk=edited_expense.pk).update)(quantity=F('quantity') + quantity_divided)
+				logging.debug(f'update {currency_code} debt for {mention}')
+			else:
+				new_expense = Expenses(lender=lender_model, debtor=debtor_model, quantity=quantity_divided, currency=currency_model)
+				await sync_to_async(new_expense.save)()
+				logging.debug(f'added debt for {mention}')
+
+	# creates a dictionary of debtors
+	# key = str debtor__username
+	# value = list of str(<quantity> <currency>)
+	def formatDebtors(self, debtors: list):
+		indiv_debtors_dict = {}
+		for debtor in debtors:
+			username = debtor['debtor__username']
+			quantity = debtor['quantity']
+			currency = debtor['currency__code']
+
+			debt_details = str(quantity) + ' ' + currency
+			
+			if username not in indiv_debtors_dict:
+				indiv_debtors_dict[username] = []
+
+			indiv_debtors_dict[username].append(debt_details)
+		return indiv_debtors_dict
+
+	'''
+	Lets a user view their debtors
+	'''
+	async def viewDebtors(self):
+		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+		# debtors = await sync_to_async(Expenses.objects.filter(lender=lender_model))
+		debtors = await sync_to_async(list)(
+            Expenses.objects.filter(lender=lender_model).values('debtor__username', 'quantity', 'currency__code')
+        )
+		indiv_debtors_dict = self.formatDebtors(debtors)
+		return indiv_debtors_dict
+
+	'''
+	Lets a user view their lenders
+	'''
+	async def viewLenders(self):
+		pass
 
 # ---USER FUNCTIONS---
 
@@ -193,7 +246,28 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await context_bot.sendMessage(f"The users {nonExistentMentionsString} do not have registered EzDebts accounts")
 	else:
 		await current_user.addDebts(mentions_checker.mentioned_users, debt)
+		await context_bot.sendMessage(f"Debt has been added for {mentions_checker.mentioned_users}")
 		logging.debug("Successfully added debt")
+
+async def viewDebtors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	telegram_user = update.effective_user
+	chat_id = update.effective_chat.id
+	bot = context.bot
+
+	context_bot = ContextBot(bot, chat_id)
+	current_user = User(telegram_user)
+
+	indiv_debtors_dict = await current_user.viewDebtors()
+	formatted_debtors_message = []
+
+	for username in indiv_debtors_dict:
+		formatted_debtors_message.append(username + ':\n')
+		for debt in indiv_debtors_dict[username]:
+			formatted_debtors_message.append(debt + '\n')
+		formatted_debtors_message.append('\n')
+	formatted_debtors_message_string = ''.join(formatted_debtors_message)
+	await context_bot.sendMessage(formatted_debtors_message_string)
+	# await context_bot.sendMessage(debtors_vals)
 	
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
@@ -203,6 +277,7 @@ if __name__ == '__main__':
 	callback_handler = CommandHandler('callback', callback)
 	createAcc_handler = CommandHandler('register', createAccount)
 	addExpense_handler = CommandHandler('addexpense', addExpense)
+	viewDebtors_handler = CommandHandler('viewdebtors', viewDebtors)
 	unkown_handler = MessageHandler(filters.COMMAND, unknown)
 
 	application.add_handler(start_handler)
@@ -210,6 +285,7 @@ if __name__ == '__main__':
 	application.add_handler(callback_handler)
 	application.add_handler(createAcc_handler)
 	application.add_handler(addExpense_handler)
+	application.add_handler(viewDebtors_handler)
 	application.add_handler(unkown_handler)
 	
 	application.run_polling()
