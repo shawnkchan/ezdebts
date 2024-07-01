@@ -162,46 +162,50 @@ class User():
 				logging.debug(f'added debt for {mention}')
 
 	'''
-	Creates a dictionary of debtors in the following format:
+	Creates a dictionary of debtors or lenders in the following format:
 	dict[str <debtor__username>] = [str(<quantity> <currency>)]
 	'''
-	def _createDebtorsDict(self, debtors: list):
-		indiv_debtors_dict = {}
-		for debtor in debtors:
-			username = debtor['debtor__username']
-			quantity = debtor['quantity']
-			currency = debtor['currency__code']
+	def _createCounterpartyDict(self, counterparties: list, findingDebtors: bool):
+		if findingDebtors:
+			counterparty__username = 'debtor__username'
+		else:
+			counterparty__username = 'lender__username'
+
+		counterparties_dict = {}
+		for counterparty in counterparties:
+			username = counterparty[counterparty__username]
+			quantity = counterparty['quantity']
+			currency = counterparty['currency__code']
 
 			debt_details = str(quantity) + ' ' + currency
 			
-			if username not in indiv_debtors_dict:
-				indiv_debtors_dict[username] = []
+			if username not in counterparties_dict:
+				counterparties_dict[username] = []
 
-			indiv_debtors_dict[username].append(debt_details)
-		return indiv_debtors_dict
+			counterparties_dict[username].append(debt_details)
+		return counterparties_dict
 
-	def _createFormattedMessage(self, indiv_debtors_dict: dict) -> str:
-		formatted_debtors_message = []
+	def _createFormattedMessage(self, counterparties_dict: dict) -> str:
+		formatted_counterparties_message = []
 
-		for username in indiv_debtors_dict:
-			formatted_debtors_message.append(username + ':\n')
-			for debt in indiv_debtors_dict[username]:
-				formatted_debtors_message.append(debt + '\n')
-			formatted_debtors_message.append('\n')
+		for username in counterparties_dict:
+			formatted_counterparties_message.append(username + ':\n')
+			for debt in counterparties_dict[username]:
+				formatted_counterparties_message.append(debt + '\n')
+			formatted_counterparties_message.append('\n')
 
-		formatted_debtors_message_string = ''.join(formatted_debtors_message)
-		return formatted_debtors_message_string
+		formatted_counterparties_message_string = ''.join(formatted_counterparties_message)
+		return formatted_counterparties_message_string
 
 	'''
 	Lets a user view their debtors
 	'''
 	async def viewDebtors(self):
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
-		# debtors = await sync_to_async(Expenses.objects.filter(lender=lender_model))
 		debtors = await sync_to_async(list)(
             Expenses.objects.filter(lender=lender_model).values('debtor__username', 'quantity', 'currency__code')
         )
-		indiv_debtors_dict = self._createDebtorsDict(debtors)
+		indiv_debtors_dict = self._createCounterpartyDict(debtors, findingDebtors=True)
 		view_debtors_as_string = self._createFormattedMessage(indiv_debtors_dict)
 		return view_debtors_as_string
 
@@ -209,7 +213,11 @@ class User():
 	Lets a user view their lenders
 	'''
 	async def viewLenders(self):
-		pass
+		borrower_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+		lenders = await sync_to_async(list)(Expenses.objects.filter(debtor=borrower_model).values('lender__username', 'quantity', 'currency__code'))
+		indiv_lenders_dict = self._createCounterpartyDict(lenders, findingDebtors=False)
+		view_lenders_as_string = self._createFormattedMessage(indiv_lenders_dict)
+		return view_lenders_as_string
 
 # ---USER FUNCTIONS---
 
@@ -274,7 +282,8 @@ async def viewDebtors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> Non
 	view_debtors_as_string = await current_user.viewDebtors()
 	
 	await context_bot.sendMessage(view_debtors_as_string)
-	
+
+
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
 	
