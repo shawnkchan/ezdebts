@@ -197,9 +197,7 @@ class User():
 		formatted_counterparties_message_string = ''.join(formatted_counterparties_message)
 		return formatted_counterparties_message_string
 
-	'''
-	Lets a user view their debtors
-	'''
+
 	async def viewDebtors(self):
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		debtors = await sync_to_async(list)(
@@ -209,15 +207,27 @@ class User():
 		view_debtors_as_string = self._createFormattedMessage(indiv_debtors_dict)
 		return view_debtors_as_string
 
-	'''
-	Lets a user view their lenders
-	'''
+
 	async def viewLenders(self):
 		borrower_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		lenders = await sync_to_async(list)(Expenses.objects.filter(debtor=borrower_model).values('lender__username', 'quantity', 'currency__code'))
 		indiv_lenders_dict = self._createCounterpartyDict(lenders, findingDebtors=False)
 		view_lenders_as_string = self._createFormattedMessage(indiv_lenders_dict)
 		return view_lenders_as_string
+
+	'''
+	deletes a single debt
+	'''
+	async def deleteDebt(self, mention: str, currency_code: str):
+		
+
+		pass
+
+	'''
+	Future features: 
+	automatic conversion and collation of debts in different currencies
+	delete multiple debts
+	'''
 
 # ---USER FUNCTIONS---
 
@@ -282,10 +292,10 @@ async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 	if message_list[0] == '/viewdebtors':
 		view_debtors_as_string = await current_user.viewDebtors()
-		return_counterparties_string = 'DEBTORS: \n' + view_debtors_as_string
+		return_counterparties_string = 'Your debtors: \n' + view_debtors_as_string
 	else:
 		view_lenders_as_string = await current_user.viewLenders()
-		return_counterparties_string = 'LENDERS: \n' + view_lenders_as_string
+		return_counterparties_string = 'Your lenders: \n' + view_lenders_as_string
 
 	await context_bot.sendMessage(return_counterparties_string)
 
