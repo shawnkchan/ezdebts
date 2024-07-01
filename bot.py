@@ -308,6 +308,7 @@ if __name__ == '__main__':
 	application.add_handler(createAcc_handler)
 	application.add_handler(addExpense_handler)
 	application.add_handler(viewDebtors_handler)
+	application.add_handler(viewLenders_handler)
 	application.add_handler(unkown_handler)
-	
+
 	application.run_polling()
