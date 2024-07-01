@@ -271,17 +271,23 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await context_bot.sendMessage(f"Debt has been added for {mentions_checker.mentioned_users}")
 		logging.debug("Successfully added debt")
 
-async def viewDebtors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	telegram_user = update.effective_user
 	chat_id = update.effective_chat.id
 	bot = context.bot
+	message_list = update.message.text.split()
 
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user)
 
-	view_debtors_as_string = await current_user.viewDebtors()
-	
-	await context_bot.sendMessage(view_debtors_as_string)
+	if message_list[0] == '/viewdebtors':
+		view_debtors_as_string = await current_user.viewDebtors()
+		return_counterparties_string = 'DEBTORS: \n' + view_debtors_as_string
+	else:
+		view_lenders_as_string = await current_user.viewLenders()
+		return_counterparties_string = 'LENDERS: \n' + view_lenders_as_string
+
+	await context_bot.sendMessage(return_counterparties_string)
 
 
 if __name__ == '__main__':
@@ -292,7 +298,8 @@ if __name__ == '__main__':
 	callback_handler = CommandHandler('callback', callback)
 	createAcc_handler = CommandHandler('register', createAccount)
 	addExpense_handler = CommandHandler('addexpense', addExpense)
-	viewDebtors_handler = CommandHandler('viewdebtors', viewDebtors)
+	viewDebtors_handler = CommandHandler('viewdebtors', viewCounterparties)
+	viewLenders_handler = CommandHandler('viewlenders', viewCounterparties)
 	unkown_handler = MessageHandler(filters.COMMAND, unknown)
 
 	application.add_handler(start_handler)
