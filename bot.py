@@ -161,41 +161,63 @@ class User():
 				await sync_to_async(new_expense.save)()
 				logging.debug(f'added debt for {mention}')
 
-	# creates a dictionary of debtors
-	# key = str debtor__username
-	# value = list of str(<quantity> <currency>)
-	def formatDebtors(self, debtors: list):
-		indiv_debtors_dict = {}
-		for debtor in debtors:
-			username = debtor['debtor__username']
-			quantity = debtor['quantity']
-			currency = debtor['currency__code']
+	'''
+	Creates a dictionary of debtors or lenders in the following format:
+	dict[str <debtor__username>] = [str(<quantity> <currency>)]
+	'''
+	def _createCounterpartyDict(self, counterparties: list, findingDebtors: bool):
+		if findingDebtors:
+			counterparty__username = 'debtor__username'
+		else:
+			counterparty__username = 'lender__username'
+
+		counterparties_dict = {}
+		for counterparty in counterparties:
+			username = counterparty[counterparty__username]
+			quantity = counterparty['quantity']
+			currency = counterparty['currency__code']
 
 			debt_details = str(quantity) + ' ' + currency
 			
-			if username not in indiv_debtors_dict:
-				indiv_debtors_dict[username] = []
+			if username not in counterparties_dict:
+				counterparties_dict[username] = []
 
-			indiv_debtors_dict[username].append(debt_details)
-		return indiv_debtors_dict
+			counterparties_dict[username].append(debt_details)
+		return counterparties_dict
+
+	def _createFormattedMessage(self, counterparties_dict: dict) -> str:
+		formatted_counterparties_message = []
+
+		for username in counterparties_dict:
+			formatted_counterparties_message.append(username + ':\n')
+			for debt in counterparties_dict[username]:
+				formatted_counterparties_message.append(debt + '\n')
+			formatted_counterparties_message.append('\n')
+
+		formatted_counterparties_message_string = ''.join(formatted_counterparties_message)
+		return formatted_counterparties_message_string
 
 	'''
 	Lets a user view their debtors
 	'''
 	async def viewDebtors(self):
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
-		# debtors = await sync_to_async(Expenses.objects.filter(lender=lender_model))
 		debtors = await sync_to_async(list)(
             Expenses.objects.filter(lender=lender_model).values('debtor__username', 'quantity', 'currency__code')
         )
-		indiv_debtors_dict = self.formatDebtors(debtors)
-		return indiv_debtors_dict
+		indiv_debtors_dict = self._createCounterpartyDict(debtors, findingDebtors=True)
+		view_debtors_as_string = self._createFormattedMessage(indiv_debtors_dict)
+		return view_debtors_as_string
 
 	'''
 	Lets a user view their lenders
 	'''
 	async def viewLenders(self):
-		pass
+		borrower_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+		lenders = await sync_to_async(list)(Expenses.objects.filter(debtor=borrower_model).values('lender__username', 'quantity', 'currency__code'))
+		indiv_lenders_dict = self._createCounterpartyDict(lenders, findingDebtors=False)
+		view_lenders_as_string = self._createFormattedMessage(indiv_lenders_dict)
+		return view_lenders_as_string
 
 # ---USER FUNCTIONS---
 
@@ -249,26 +271,25 @@ async def addExpense(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await context_bot.sendMessage(f"Debt has been added for {mentions_checker.mentioned_users}")
 		logging.debug("Successfully added debt")
 
-async def viewDebtors(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	telegram_user = update.effective_user
 	chat_id = update.effective_chat.id
 	bot = context.bot
+	message_list = update.message.text.split()
 
 	context_bot = ContextBot(bot, chat_id)
 	current_user = User(telegram_user)
 
-	indiv_debtors_dict = await current_user.viewDebtors()
-	formatted_debtors_message = []
+	if message_list[0] == '/viewdebtors':
+		view_debtors_as_string = await current_user.viewDebtors()
+		return_counterparties_string = 'DEBTORS: \n' + view_debtors_as_string
+	else:
+		view_lenders_as_string = await current_user.viewLenders()
+		return_counterparties_string = 'LENDERS: \n' + view_lenders_as_string
 
-	for username in indiv_debtors_dict:
-		formatted_debtors_message.append(username + ':\n')
-		for debt in indiv_debtors_dict[username]:
-			formatted_debtors_message.append(debt + '\n')
-		formatted_debtors_message.append('\n')
-	formatted_debtors_message_string = ''.join(formatted_debtors_message)
-	await context_bot.sendMessage(formatted_debtors_message_string)
-	# await context_bot.sendMessage(debtors_vals)
-	
+	await context_bot.sendMessage(return_counterparties_string)
+
+
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
 	
@@ -277,7 +298,8 @@ if __name__ == '__main__':
 	callback_handler = CommandHandler('callback', callback)
 	createAcc_handler = CommandHandler('register', createAccount)
 	addExpense_handler = CommandHandler('addexpense', addExpense)
-	viewDebtors_handler = CommandHandler('viewdebtors', viewDebtors)
+	viewDebtors_handler = CommandHandler('viewdebtors', viewCounterparties)
+	viewLenders_handler = CommandHandler('viewlenders', viewCounterparties)
 	unkown_handler = MessageHandler(filters.COMMAND, unknown)
 
 	application.add_handler(start_handler)
@@ -286,6 +308,7 @@ if __name__ == '__main__':
 	application.add_handler(createAcc_handler)
 	application.add_handler(addExpense_handler)
 	application.add_handler(viewDebtors_handler)
+	application.add_handler(viewLenders_handler)
 	application.add_handler(unkown_handler)
-	
+
 	application.run_polling()
