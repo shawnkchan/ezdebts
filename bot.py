@@ -60,6 +60,28 @@ class ContextBot():
 
 # class MessageFactoryInterface():
 # 	pass
+class MessageProcessor():
+	def __init__(self, message: telegram.Message) -> None:
+		self.mentionedUsers = []
+		self.currencies = []
+		self.quantities = []
+		self.message = message
+		self.messageList = message.text.split()
+
+	def retrieveQuantities(self) -> None:
+		for word in self.messageList:
+			if word.isdigit():
+				self.quantities.append(float(word))
+
+	async def retrieveCurrencies(self) -> None:
+		for word in self.messageList:
+			currencyExists = await sync_to_async(Currencies.objects.filter(code=word.upper()).exists)()
+			if currencyExists:
+				self.currencies.append(word.upper())
+
+	async def retrieveMentions(self) -> None:
+		mentionsChecker = MentionsChecker(self.message)
+		self.mentionedUsers = mentionsChecker.self
 
 class MentionsChecker():
 	def __init__(self, message: telegram.Message) -> None:
@@ -306,7 +328,11 @@ async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 async def deleteDebt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 	telegram_user = update.effective_user
-	chat_id 
+	chat_id = update.effective_chat.id
+	bot = context.bot
+
+	current_user = User(telegram_user)
+	current_user.deleteDebt()
 
 
 if __name__ == '__main__':
