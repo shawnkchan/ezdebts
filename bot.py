@@ -106,6 +106,7 @@ class User():
 		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
+		self.userModel = get_object_or_404(UserData, username=telegram_user.name)
 
 	async def createAccount(self):
 		user_full_name_list = self.user_full_name.split()
@@ -216,12 +217,16 @@ class User():
 		return view_lenders_as_string
 
 	'''
-	deletes a single debt
+	deletes a single debt as a lender
+
 	'''
 	async def deleteDebt(self, mention: str, currency_code: str):
-		
+		lenderModel = self.userModel
+		debtorModel = await sync_to_async(get_object_or_404)(UserData, username=mention)
+		currencyModel = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+		entryToDelete = await sync_to_async(get_object_or_404)(Expenses, lender=lenderModel, debtor=debtorModel, currency=currencyModel)
+		entryToDelete.delete()
 
-		pass
 
 	'''
 	Future features: 
@@ -298,6 +303,10 @@ async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE)
 		return_counterparties_string = 'Your lenders: \n' + view_lenders_as_string
 
 	await context_bot.sendMessage(return_counterparties_string)
+
+async def deleteDebt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	telegram_user = update.effective_user
+	chat_id 
 
 
 if __name__ == '__main__':
