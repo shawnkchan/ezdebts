@@ -242,11 +242,14 @@ class User():
 
 	'''
 	async def deleteSingleDebt(self, mention: str, currency_code: str):
-		lenderModel = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
-		debtorModel = await sync_to_async(get_object_or_404)(UserData, username=mention)
-		currencyModel = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
-		await sync_to_async(Expenses.objects.filter(lender=lenderModel, debtor=debtorModel, currency=currencyModel).delete)()
-		print('success')
+		try: 
+			lenderModel = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+			debtorModel = await sync_to_async(get_object_or_404)(UserData, username=mention)
+			currencyModel = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+			await sync_to_async(Expenses.objects.filter(lender=lenderModel, debtor=debtorModel, currency=currencyModel).delete)()
+			return True
+		except:
+			return False
 
 
 	async def deleteDebts(self, mentionedUsers: list):
@@ -347,7 +350,11 @@ async def deleteDebt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None
 		await contextBot.sendMessage(f"The users {nonExistentUsers} do not have registered EzDebts accounts")
 
 	currency = message_list[-1].upper()
-	await current_user.deleteSingleDebt(mentionsChecker.mentioned_users[0], currency)
+	successfulDelete = await current_user.deleteSingleDebt(mentionsChecker.mentioned_users[0], currency)
+	if successfulDelete:
+		await contextBot.sendMessage("Successfully deleted debt")
+	else:
+		await contextBot.sendMessage("Failed to delete debt")
 
 # improve experience by integrating chatgpt to talk naturally?
 if __name__ == '__main__':
