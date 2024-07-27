@@ -21,7 +21,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 logging.basicConfig(
-	level=logging.DEBUG
 )
 
 # DEMO FUNCTIONS
@@ -128,7 +127,7 @@ class User():
 		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
-		self.userModel = get_object_or_404(UserData, username=telegram_user.name)
+		# self.userModel = await get_object_or_404(UserData, username=telegram_user.name)
 
 	async def createAccount(self):
 		user_full_name_list = self.user_full_name.split()
@@ -242,12 +241,16 @@ class User():
 	deletes a single debt as a lender
 
 	'''
-	async def deleteDebt(self, mention: str, currency_code: str):
-		lenderModel = self.userModel
+	async def deleteSingleDebt(self, mention: str, currency_code: str):
+		lenderModel = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		debtorModel = await sync_to_async(get_object_or_404)(UserData, username=mention)
 		currencyModel = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
-		entryToDelete = await sync_to_async(get_object_or_404)(Expenses, lender=lenderModel, debtor=debtorModel, currency=currencyModel)
-		entryToDelete.delete()
+		await sync_to_async(Expenses.objects.filter(lender=lenderModel, debtor=debtorModel, currency=currencyModel).delete)()
+		print('success')
+
+
+	async def deleteDebts(self, mentionedUsers: list):
+		pass
 
 
 	'''
@@ -327,14 +330,26 @@ async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE)
 	await context_bot.sendMessage(return_counterparties_string)
 
 async def deleteDebt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	# User should only need to tag counterparty (or more than one) and the currency of the debt they want to delete
+	# assuming that only one user is tagged
 	telegram_user = update.effective_user
-	chat_id = update.effective_chat.id
+	chatId = update.effective_chat.id
 	bot = context.bot
+	message = update.message
+	message_list = update.message.text.split()
 
+	contextBot = ContextBot(bot, chatId)
+	mentionsChecker = MentionsChecker(message)
 	current_user = User(telegram_user)
-	current_user.deleteDebt()
 
+	if not mentionsChecker.allValidMentions():
+		nonExistentUsers = await mentionsChecker.returnNonExistentUsers
+		await contextBot.sendMessage(f"The users {nonExistentUsers} do not have registered EzDebts accounts")
 
+	currency = message_list[-1].upper()
+	await current_user.deleteSingleDebt(mentionsChecker.mentioned_users[0], currency)
+
+# improve experience by integrating chatgpt to talk naturally?
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
 	
@@ -345,6 +360,7 @@ if __name__ == '__main__':
 	addExpense_handler = CommandHandler('addexpense', addExpense)
 	viewDebtors_handler = CommandHandler('viewdebtors', viewCounterparties)
 	viewLenders_handler = CommandHandler('viewlenders', viewCounterparties)
+	deleteDebtHandler = CommandHandler('deletedebt', deleteDebt)
 	unkown_handler = MessageHandler(filters.COMMAND, unknown)
 
 	application.add_handler(start_handler)
@@ -354,6 +370,7 @@ if __name__ == '__main__':
 	application.add_handler(addExpense_handler)
 	application.add_handler(viewDebtors_handler)
 	application.add_handler(viewLenders_handler)
+	application.add_handler(deleteDebtHandler)
 	application.add_handler(unkown_handler)
 
 	application.run_polling()
