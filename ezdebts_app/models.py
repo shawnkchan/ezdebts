@@ -27,8 +27,8 @@ class Currencies(models.Model):
         return f"{self.code}, {self.name}, {self.symbol}"
 
 class Expenses(models.Model):
-    lender = models.ForeignKey(UserData, on_delete=models.CASCADE, related_name="receivables")
-    debtor = models.ForeignKey(UserData, on_delete=models.CASCADE, related_name="debts")
+    lender = models.ForeignKey(UserData, on_delete=models.PROTECT, related_name="receivables")
+    debtor = models.ForeignKey(UserData, on_delete=models.PROTECT, related_name="debts")
     quantity = models.DecimalField(max_digits=100, decimal_places=2)
     currency = models.ForeignKey(Currencies, on_delete=models.PROTECT, related_name="expenses")
 

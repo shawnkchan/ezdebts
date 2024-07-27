@@ -21,7 +21,6 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 logging.basicConfig(
-	level=logging.DEBUG
 )
 
 # DEMO FUNCTIONS
@@ -60,6 +59,28 @@ class ContextBot():
 
 # class MessageFactoryInterface():
 # 	pass
+class MessageProcessor():
+	def __init__(self, message: telegram.Message) -> None:
+		self.mentionedUsers = []
+		self.currencies = []
+		self.quantities = []
+		self.message = message
+		self.messageList = message.text.split()
+
+	def retrieveQuantities(self) -> None:
+		for word in self.messageList:
+			if word.isdigit():
+				self.quantities.append(float(word))
+
+	async def retrieveCurrencies(self) -> None:
+		for word in self.messageList:
+			currencyExists = await sync_to_async(Currencies.objects.filter(code=word.upper()).exists)()
+			if currencyExists:
+				self.currencies.append(word.upper())
+
+	async def retrieveMentions(self) -> None:
+		mentionsChecker = MentionsChecker(self.message)
+		self.mentionedUsers = mentionsChecker.self
 
 class MentionsChecker():
 	def __init__(self, message: telegram.Message) -> None:
@@ -106,6 +127,7 @@ class User():
 		self.user_full_name = telegram_user.full_name
 		self.user_first_name = ''
 		self.user_last_name = ''
+		# self.userModel = await get_object_or_404(UserData, username=telegram_user.name)
 
 	async def createAccount(self):
 		user_full_name_list = self.user_full_name.split()
@@ -197,9 +219,7 @@ class User():
 		formatted_counterparties_message_string = ''.join(formatted_counterparties_message)
 		return formatted_counterparties_message_string
 
-	'''
-	Lets a user view their debtors
-	'''
+
 	async def viewDebtors(self):
 		lender_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		debtors = await sync_to_async(list)(
@@ -209,15 +229,38 @@ class User():
 		view_debtors_as_string = self._createFormattedMessage(indiv_debtors_dict)
 		return view_debtors_as_string
 
-	'''
-	Lets a user view their lenders
-	'''
+
 	async def viewLenders(self):
 		borrower_model = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
 		lenders = await sync_to_async(list)(Expenses.objects.filter(debtor=borrower_model).values('lender__username', 'quantity', 'currency__code'))
 		indiv_lenders_dict = self._createCounterpartyDict(lenders, findingDebtors=False)
 		view_lenders_as_string = self._createFormattedMessage(indiv_lenders_dict)
 		return view_lenders_as_string
+
+	'''
+	deletes a single debt as a lender
+
+	'''
+	async def deleteSingleDebt(self, mention: str, currency_code: str):
+		try: 
+			lenderModel = await sync_to_async(get_object_or_404)(UserData, username=self.user_handle)
+			debtorModel = await sync_to_async(get_object_or_404)(UserData, username=mention)
+			currencyModel = await sync_to_async(get_object_or_404)(Currencies, code=currency_code)
+			await sync_to_async(Expenses.objects.filter(lender=lenderModel, debtor=debtorModel, currency=currencyModel).delete)()
+			return True
+		except:
+			return False
+
+
+	async def deleteDebts(self, mentionedUsers: list):
+		pass
+
+
+	'''
+	Future features: 
+	automatic conversion and collation of debts in different currencies
+	delete multiple debts
+	'''
 
 # ---USER FUNCTIONS---
 
@@ -282,14 +325,38 @@ async def viewCounterparties(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
 	if message_list[0] == '/viewdebtors':
 		view_debtors_as_string = await current_user.viewDebtors()
-		return_counterparties_string = 'DEBTORS: \n' + view_debtors_as_string
+		return_counterparties_string = 'Your debtors: \n' + view_debtors_as_string
 	else:
 		view_lenders_as_string = await current_user.viewLenders()
-		return_counterparties_string = 'LENDERS: \n' + view_lenders_as_string
+		return_counterparties_string = 'Your lenders: \n' + view_lenders_as_string
 
 	await context_bot.sendMessage(return_counterparties_string)
 
+async def deleteDebt(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+	# User should only need to tag counterparty (or more than one) and the currency of the debt they want to delete
+	# assuming that only one user is tagged
+	telegram_user = update.effective_user
+	chatId = update.effective_chat.id
+	bot = context.bot
+	message = update.message
+	message_list = update.message.text.split()
 
+	contextBot = ContextBot(bot, chatId)
+	mentionsChecker = MentionsChecker(message)
+	current_user = User(telegram_user)
+
+	if not mentionsChecker.allValidMentions():
+		nonExistentUsers = await mentionsChecker.returnNonExistentUsers
+		await contextBot.sendMessage(f"The users {nonExistentUsers} do not have registered EzDebts accounts")
+
+	currency = message_list[-1].upper()
+	successfulDelete = await current_user.deleteSingleDebt(mentionsChecker.mentioned_users[0], currency)
+	if successfulDelete:
+		await contextBot.sendMessage("Successfully deleted debt")
+	else:
+		await contextBot.sendMessage("Failed to delete debt")
+
+# improve experience by integrating chatgpt to talk naturally?
 if __name__ == '__main__':
 	application = ApplicationBuilder().token(BOT_TOKEN).build()
 	
@@ -300,6 +367,7 @@ if __name__ == '__main__':
 	addExpense_handler = CommandHandler('addexpense', addExpense)
 	viewDebtors_handler = CommandHandler('viewdebtors', viewCounterparties)
 	viewLenders_handler = CommandHandler('viewlenders', viewCounterparties)
+	deleteDebtHandler = CommandHandler('deletedebt', deleteDebt)
 	unkown_handler = MessageHandler(filters.COMMAND, unknown)
 
 	application.add_handler(start_handler)
@@ -309,6 +377,7 @@ if __name__ == '__main__':
 	application.add_handler(addExpense_handler)
 	application.add_handler(viewDebtors_handler)
 	application.add_handler(viewLenders_handler)
+	application.add_handler(deleteDebtHandler)
 	application.add_handler(unkown_handler)
 
 	application.run_polling()
